@@ -1,0 +1,366 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+ *
+ * Copyright (c) 2018 Teemo Pango <teemopango@gmail.com>
+ *
+ */
+
+/dts-v1/;
+
+#include "ipq8074.dtsi"
+#include "ipq8074-ess.dtsi"
+#include "ipq8074-nss.dtsi"
+#include "ipq8074-common.dtsi"
+#include "ipq8074-hk-cpu.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Inseego Fg2000";
+	compatible = "inseego,fg2000", "qcom,ipq8074";
+	
+	aliases {
+		serial0 = &blsp1_uart5;
+		ethernet0 = &dp1;
+		ethernet1 = &dp2;
+		ethernet2 = &dp3;
+		ethernet3 = &dp4;
+		ethernet4 = &dp5;
+		ethernet5 = &dp6;
+		label-mac-device = &dp3;
+	};
+	
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+	
+	keys {
+		compatible = "gpio-keys";
+		
+		wps-button {
+			label = "wps";
+			gpios = <&tlmm 47 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_WPS_BUTTON>;
+		};
+		
+		reset-button {
+			label = "reset";
+			gpios = <&tlmm 1 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+		};
+	};
+
+	// 风扇硬件配置（GPIO控制）
+	fan: gpio-fan {
+		#cooling-cells = <2>;          // 支持内核温控框架，需2个参数（最小/最大档位）
+		compatible = "gpio-fan";       // 使用通用GPIO风扇驱动
+		gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;  // 控制引脚：tlmm控制器的29号引脚，高电平有效
+		gpio-fan,speed-map = <0 0>, <1 1>;    // 转速映射：0=停转（低电平），1=运行（高电平）
+	};
+};
+
+// CPU0温度传感器及散热策略
+&cpu0_thermal {
+    trips {
+        cpu0_trip_active: cpu-active {
+            temperature = <60000>;  // 触发温度：60°C（单位：毫摄氏度）
+            hysteresis = <2000>;    // 回差温度：2°C（降至58°C时停止散热）
+            type = "active";        // 主动散热类型
+        };
+    };
+
+    cooling-maps {
+        cpu-active {
+            cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;  // 关联风扇设备
+            trip = <&cpu0_trip_active>;  // 关联温度阈值
+        };
+    };
+};
+
+// CPU1温度传感器及散热策略
+&cpu1_thermal {
+    trips {
+        cpu1_trip_active: cpu-active {
+            temperature = <60000>;  // 触发温度：60°C
+            hysteresis = <2000>;    // 回差温度：2°C
+            type = "active";
+        };
+    };
+
+    cooling-maps {
+        cpu-active {
+            cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+            trip = <&cpu1_trip_active>;
+        };
+    };
+};
+
+// CPU2温度传感器及散热策略
+&cpu2_thermal {
+    trips {
+        cpu2_trip_active: cpu-active {
+            temperature = <60000>;  // 触发温度：60°C
+            hysteresis = <2000>;    // 回差温度：2°C
+            type = "active";
+        };
+    };
+
+    cooling-maps {
+        cpu-active {
+            cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+            trip = <&cpu2_trip_active>;
+        };
+    };
+};
+
+// CPU3温度传感器及散热策略
+&cpu3_thermal {
+    trips {
+        cpu3_trip_active: cpu-active {
+            temperature = <60000>;  // 触发温度：60°C
+            hysteresis = <2000>;    // 回差温度：2°C
+            type = "active";
+        };
+    };
+
+    cooling-maps {
+        cpu-active {
+            cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+            trip = <&cpu3_trip_active>;
+        };
+    };
+};
+
+// CPU集群温度传感器及散热策略
+&cluster_thermal {
+    trips {
+        cluster_active: cluster-active {
+            temperature = <60000>;  // 触发温度：60°C
+            hysteresis = <2000>;    // 回差温度：2°C
+            type = "active";
+        };
+    };
+
+    cooling-maps {
+        cluster-active {
+            cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+            trip = <&cluster_active>;
+        };
+    };
+};
+
+&tlmm {
+	// 修改标签名称，避免与包含文件中的定义冲突
+	fg2000_mdio_pins: mdio-state {
+		mdc-pins {
+			pins = "gpio68";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-disable;
+		};
+		
+		mdio-pins {
+			pins = "gpio69";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+};
+
+&edma {
+	status = "okay";
+};
+
+&blsp1_uart5 {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&ssphy_0 {
+	status = "okay";
+};
+
+&qusb_phy_0 {
+	status = "okay";
+};
+
+&ssphy_1 {
+	status = "okay";
+};
+
+&qusb_phy_1 {
+	status = "okay";
+};
+
+&usb_0 {
+	status = "okay";
+};
+
+&usb_1 {
+	status = "okay";
+};
+
+&cryptobam {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
+};
+
+&qpic_bam {
+	status = "okay";
+};
+
+
+&blsp1_spi1 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		spi-max-frequency = <50000000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		reg = <0>;
+
+		partitions {
+			compatible = "qcom,smem-part";
+		};
+	};
+};
+
+&sdhc_1 {
+	status = "okay";
+
+	/delete-property/ mmc-hs400-1_8v;
+	mmc-hs200-1_8v;
+	mmc-ddr-1_8v;
+	vqmmc-supply = <&l11>;
+};
+
+&mdio {
+	status = "okay";
+	// 使用修改后的标签
+	pinctrl-0 = <&fg2000_mdio_pins>;
+	pinctrl-names = "default";
+	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+	
+	ethernet-phy-package@0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "qcom,qca8075-package";
+		reg = <0>;
+		qcom,package-mode = "psgmii";
+		
+		qca8075_0: ethernet-phy@0 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <0>;
+		};
+		
+		qca8075_1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+		};
+		
+		qca8075_2: ethernet-phy@2 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <2>;
+		};
+		
+		qca8075_3: ethernet-phy@3 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <3>;
+		};
+		
+		qca8075_4: ethernet-phy@4 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <4>;
+		};
+	};
+	
+	aqr108: ethernet-phy@7 {
+		compatible = "ethernet-phy-ieee802.3-c45";
+		reg = <7>;
+		reset-gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&dp1 {
+	status = "disabled";
+	phy-handle = <&qca8075_0>;
+};
+
+&dp2 {
+	status = "disabled";
+	phy-handle = <&qca8075_1>;
+};
+
+&dp3 {
+	status = "okay";
+	phy-handle = <&qca8075_2>;
+	label = "lan1";
+};
+
+&dp4 {
+	status = "okay";
+	phy-handle = <&qca8075_3>;
+	label = "lan2";
+};
+
+&dp5 {
+	status = "okay";
+	phy-handle = <&qca8075_4>;
+	label = "lan3";
+};
+
+&dp6 {
+	status = "okay";
+	phy-mode = "usxgmii";
+	phy-handle = <&aqr108>;
+	label = "5g";
+};
+
+&switch {
+	status = "okay";
+	switch_lan_bmp = <(ESS_PORT3 | ESS_PORT4 | ESS_PORT5)>;
+	switch_wan_bmp = <ESS_PORT6>;
+	switch_mac_mode = <0>;
+	switch_mac_mode1 = <255>;
+	switch_mac_mode2 = <13>;
+	
+	qcom,port_phyinfo {
+		port@3 {
+			port_id = <3>;
+			phy_address = <2>;
+		};
+		
+		port@4 {
+			port_id = <4>;
+			phy_address = <3>;
+		};
+		
+		port@5 {
+			port_id = <5>;
+			phy_address = <4>;
+		};
+		
+		port@6 {
+			port_id = <6>;
+			phy_address = <7>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			ethernet-phy-ieee802.3-c45;
+		};
+	};
+};
+
+&wifi {
+	status = "disabled";
+	compatible = "qcom,ipq8074-wifi";
+	qcom,ath11k-fw-memory-mode = <1>;
+	qcom,ath11k-calibration-variant = "Inseego-FG2000";
+};

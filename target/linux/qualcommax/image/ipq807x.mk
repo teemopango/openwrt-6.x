@@ -575,3 +575,16 @@ define Device/verizon_cr1000a
 	DEVICE_PACKAGES := ipq-wifi-verizon_cr1000a ath11k-firmware-qcn9074 kmod-phy-realtek
 endef
 TARGET_DEVICES += verizon_cr1000a
+
+define Device/inseego_fg2000
+    $(call Device/FitImage)
+    $(call Device/EmmcImage)
+    DEVICE_VENDOR := Inseego
+    DEVICE_MODEL := Fg2000
+    DEVICE_DTS_CONFIG := config@hk09
+    SOC := ipq8072
+	KERNEL_SIZE := 6144k
+	DEVICE_PACKAGES := kmod-hwmon-gpiofan
+	IMAGES += factory.bin
+endef
+TARGET_DEVICES += inseego_fg2000

@@ -67,6 +67,9 @@ ipq807x_setup_interfaces()
 	qnap,301w)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 10g-2" "10g-1"
 		;;
+	inseego,fg2000)
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "5g"
+		;;
 	zyxel,nbg7815)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 10g" "wan"
 		;;
