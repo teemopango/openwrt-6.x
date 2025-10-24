@@ -202,7 +202,8 @@ platform_do_upgrade() {
 		CI_ROOT_UBIPART="rootfs"
 		nand_do_upgrade "$1"
 		;;
-	zyxel,nbg7815)
+	zyxel,nbg7815|\
+	inseego,fg2000)
 		local config_mtdnum="$(find_mtd_index 0:bootconfig)"
 		[ -z "$config_mtdnum" ] && reboot
 		part_num="$(hexdump -e '1/1 "%01x|"' -n 1 -s 168 -C /dev/mtd$config_mtdnum | cut -f 1 -d "|" | head -n1)"
@@ -240,6 +241,7 @@ platform_copy_config() {
 	case "$(board_name)" in
 	prpl,haze|\
 	qnap,301w|\
+	inseego,fg2000|\
 	spectrum,sax1v1k|\
 	zyxel,nbg7815|\
 	verizon,cr1000a)
