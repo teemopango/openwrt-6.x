@@ -597,8 +597,10 @@ define Device/inseego_fg2000
     DEVICE_MODEL := Fg2000
     DEVICE_DTS_CONFIG := config@hk09
     SOC := ipq8072
+	BLOCKSIZE := 128k
 	KERNEL_SIZE := 6144k
 	DEVICE_PACKAGES := kmod-hwmon-gpiofan
 	IMAGES += factory.bin
+	IMAGE/factory.bin := append-kernel | pad-to $$$$(KERNEL_SIZE) | append-rootfs
 endef
 TARGET_DEVICES += inseego_fg2000
