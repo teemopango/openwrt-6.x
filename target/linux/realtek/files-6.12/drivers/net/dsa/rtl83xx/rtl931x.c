@@ -304,6 +304,48 @@ static int rtldsa_931x_get_mirror_config(struct rtldsa_mirror_config *config,
 	return 0;
 }
 
+static int rtldsa_931x_port_rate_police_add(struct dsa_switch *ds, int port,
+					    const struct flow_action_entry *act,
+					    bool ingress)
+{
+	u32 burst;
+	u64 rate;
+	u32 addr;
+
+	/* rate has unit 16000 bit */
+	rate = div_u64(act->police.rate_bytes_ps, 2000);
+	rate = min_t(u64, rate, RTL93XX_BANDWIDTH_CTRL_RATE_MAX);
+	rate |= RTL93XX_BANDWIDTH_CTRL_ENABLE;
+
+	burst = min_t(u32, act->police.burst, RTL931X_BANDWIDTH_CTRL_MAX_BURST);
+
+	if (ingress)
+		addr = RTL931X_BANDWIDTH_CTRL_INGRESS(port);
+	else
+		addr = RTL931X_BANDWIDTH_CTRL_EGRESS(port);
+
+	sw_w32(burst, addr + 4);
+	sw_w32(rate, addr);
+
+	return 0;
+}
+
+static int rtldsa_931x_port_rate_police_del(struct dsa_switch *ds, int port,
+					    struct flow_cls_offload *cls,
+					    bool ingress)
+{
+	u32 addr;
+
+	if (ingress)
+		addr = RTL931X_BANDWIDTH_CTRL_INGRESS(port);
+	else
+		addr = RTL931X_BANDWIDTH_CTRL_EGRESS(port);
+
+	sw_w32_mask(RTL93XX_BANDWIDTH_CTRL_ENABLE, 0, addr);
+
+	return 0;
+}
+
 irqreturn_t rtl931x_switch_irq(int irq, void *dev_id)
 {
 	struct dsa_switch *ds = dev_id;
@@ -347,13 +389,23 @@ void rtl931x_print_matrix(void)
 	rtl_table_release(r);
 }
 
-void rtldsa_931x_set_receive_management_action(int port, rma_ctrl_t type, action_type_t action)
+static void rtldsa_931x_set_receive_management_action(int port, rma_ctrl_t type,
+						      action_type_t action)
 {
-	u32 value = 0;
+	u32 shift;
+	u32 value;
+	u32 reg;
 
 	/* hack for value mapping */
 	if (type == GRATARP && action == COPY2CPU)
 		action = TRAP2MASTERCPU;
+
+	/* PTP doesn't allow to flood to all ports */
+	if (action == FLOODALL &&
+	    (type == PTP || type == PTP_UDP || type == PTP_ETH2)) {
+		pr_warn("%s: Port flooding not supported for PTP\n", __func__);
+		return;
+	}
 
 	switch(action) {
 	case FORWARD:
@@ -372,34 +424,47 @@ void rtldsa_931x_set_receive_management_action(int port, rma_ctrl_t type, action
 		value = 4;
 		break;
 	default:
-		break;
+		return;
 	}
 
 	switch(type) {
 	case BPDU:
-		sw_w32_mask(7 << ((port % 10) * 3), value << ((port % 10) * 3), RTL931X_RMA_BPDU_CTRL + ((port / 10) << 2));
-	break;
+		reg = RTL931X_RMA_BPDU_CTRL + (port / 10) * 4;
+		shift = (port % 10) * 3;
+		sw_w32_mask(GENMASK(shift + 2, shift), value << shift, reg);
+		break;
 	case PTP:
+		reg = RTL931X_RMA_PTP_CTRL + port * 4;
+
 		/* udp */
-		sw_w32_mask(3 << 2, value << 2, RTL931X_RMA_PTP_CTRL + (port << 2));
+		sw_w32_mask(GENMASK(3, 2), value << 2, reg);
+
 		/* eth2 */
-		sw_w32_mask(3, value, RTL931X_RMA_PTP_CTRL + (port << 2));
-	break;
+		sw_w32_mask(GENMASK(1, 0), value, reg);
+		break;
 	case PTP_UDP:
-		sw_w32_mask(3 << 2, value << 2, RTL931X_RMA_PTP_CTRL + (port << 2));
-	break;
+		reg = RTL931X_RMA_PTP_CTRL + port * 4;
+		sw_w32_mask(GENMASK(3, 2), value << 2, reg);
+		break;
 	case PTP_ETH2:
-		sw_w32_mask(3, value, RTL931X_RMA_PTP_CTRL + (port << 2));
-	break;
+		reg = RTL931X_RMA_PTP_CTRL + port * 4;
+		sw_w32_mask(GENMASK(1, 0), value, reg);
+		break;
 	case LLDP:
-		sw_w32_mask(7 << ((port % 10) * 3), value << ((port % 10) * 3), RTL931X_RMA_LLDP_CTRL + ((port / 10) << 2));
-	break;
+		reg = RTL931X_RMA_LLDP_CTRL + (port / 10) * 4;
+		shift = (port % 10) * 3;
+		sw_w32_mask(GENMASK(shift + 2, shift), value << shift, reg);
+		break;
 	case EAPOL:
-		sw_w32_mask(7 << ((port % 10) * 3), value << ((port % 10) * 3), RTL931X_RMA_EAPOL_CTRL + ((port / 10) << 2));
-	break;
+		reg = RTL931X_RMA_EAPOL_CTRL + (port / 10) * 4;
+		shift = (port % 10) * 3;
+		sw_w32_mask(GENMASK(shift + 2, shift), value << shift, reg);
+		break;
 	case GRATARP:
-		sw_w32_mask(3 << ((port & 0xf) << 1), value << ((port & 0xf) << 1), RTL931X_TRAP_ARP_GRAT_PORT_ACT + ((port >> 4) << 2));
-	break;
+		reg = RTL931X_TRAP_ARP_GRAT_PORT_ACT + (port / 16) * 4;
+		shift = (port % 16) * 2;
+		sw_w32_mask(GENMASK(shift + 1, shift), value << shift, reg);
+		break;
 	}
 }
 
@@ -827,10 +892,6 @@ static int rtl931x_set_ageing_time(unsigned long msec)
 	pr_debug("Dynamic aging for ports: %x\n", sw_r32(RTL931X_L2_PORT_AGE_CTRL));
 
 	return 0;
-}
-void rtl931x_sw_init(struct rtl838x_switch_priv *priv)
-{
-/*	rtl931x_sds_init(priv); */
 }
 
 static void rtl931x_pie_lookup_enable(struct rtl838x_switch_priv *priv, int index)
@@ -1547,7 +1608,7 @@ static void rtldsa_931x_led_init(struct rtl838x_switch_priv *priv)
 		sw_w32_mask(0x3 << pos, 0, RTL931X_LED_PORT_COPR_SET_SEL_CTRL(i));
 
 		/* Skip port if not present (auto-detect) or not in forced mask */
-		if (!priv->ports[i].phy && !(forced_leds_per_port[i]))
+		if (!priv->ports[i].phy && !priv->pcs[i] && !(forced_leds_per_port[i]))
 			continue;
 
 		if (forced_leds_per_port[i] > 0)
@@ -1622,6 +1683,8 @@ const struct rtl838x_reg rtl931x_reg = {
 	.l2_port_new_salrn = rtl931x_l2_port_new_salrn,
 	.l2_port_new_sa_fwd = rtl931x_l2_port_new_sa_fwd,
 	.get_mirror_config = rtldsa_931x_get_mirror_config,
+	.port_rate_police_add = rtldsa_931x_port_rate_police_add,
+	.port_rate_police_del = rtldsa_931x_port_rate_police_del,
 	.read_l2_entry_using_hash = rtl931x_read_l2_entry_using_hash,
 	.write_l2_entry_using_hash = rtl931x_write_l2_entry_using_hash,
 	.read_cam = rtl931x_read_cam,
